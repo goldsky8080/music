@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: music-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: music_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: change-this-password
+      TZ: Asia/Seoul
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  music-app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: music-app
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    env_file:
+      - ./.env.n100
+    environment:
+      PORT: 3000
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  postgres_data:
+
