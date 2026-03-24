@@ -1,261 +1,236 @@
-# AI Auto Lyrics Handoff
+﻿# AI Auto Lyrics Handoff
 
-## 1. 이 문서의 목적
+이 문서는 `d:\music` 메인 프로젝트와 별도 wrapper 프로젝트를 오가며 진행한 `AI 자동 생성` 복구 작업의 현재 상태를 다음 세션에서 바로 이어받을 수 있도록 정리한 인수인계 문서다.
 
-이 문서는 현재 `d:\music` 메인 프로젝트와 별도로 열게 될 `wrapper` 프로젝트 세션이,
-지금까지의 맥락을 잃지 않고 바로 이어서 작업할 수 있도록 만든 인수인계 문서다.
+## 1. 현재 결론
 
-핵심 목표는 `AI 자동 생성` 기능을 다시 살리는 것이다.
+- 로컬 메인 앱에서 `AI 자동 생성` 버튼은 다시 활성화했다.
+- 메인 앱의 auto 요청은 더 이상 direct Suno API가 아니라 wrapper `/api/custom_generate` 를 타도록 바꿨다.
+- 테스트 wrapper `dev-suno.songsai.org` 에서 자동 가사 생성이 실제로 성공했다.
+- 아직 운영 wrapper `suno.songsai.org` 와 운영 메인 앱에는 이 auto 경로를 반영하지 않았다.
 
-현재 메인 앱의 수동 가사 생성은 정상 동작하지만, 자동 가사 생성은 아직 wrapper 패치가 필요하다.
+즉, **운영 영향 없이 테스트 환경에서 auto 흐름 검증까지 끝난 상태**다.
 
-## 2. 전체 구조 요약
+## 2. 전체 구조
 
-### 메인 앱
-- 로컬 개발 경로: `d:\music`
-- 서비스 도메인: `https://songsai.org`
+### 메인 프로젝트
+- 경로: `d:\music`
 - 로컬 개발 URL: `http://localhost:3000`
-- 운영 메인 앱은 Docker Compose 기반으로 N100 서버에서 실행 중
+- 운영 URL: `https://songsai.org`
 
 ### 운영 wrapper
 - 공개 주소: `https://suno.songsai.org`
-- 서버 내부 포트: `3101`
-- 역할: 실제 운영에서 사용하는 Suno wrapper
-- 상태: 정상 운영 중, 건드리면 운영 서비스에 영향 갈 수 있음
+- 서버 포트: `3101`
+- 역할: 실제 운영 생성 요청 처리
 
 ### 테스트 wrapper
 - 공개 주소: `https://dev-suno.songsai.org`
-- 서버 내부 포트: `3201`
-- 역할: AI 자동 가사 같은 위험한 기능을 운영 영향 없이 먼저 검증하는 테스트용 wrapper
-- 상태: 이미 N100 서버에 분리 배치 완료, `get_limit` 응답 정상
+- 서버 포트: `3201`
+- 역할: auto 관련 패치 검증 전용
 
-## 3. 왜 지금 wrapper 프로젝트를 따로 열어야 하는가
+## 3. 왜 wrapper 프로젝트를 따로 봐야 했는가
 
-현재 `d:\music` 는 메인 앱 프로젝트다.
+문제의 본질은 메인 UI가 아니라 wrapper였다.
 
-문제의 핵심은 메인 앱 UI나 API route가 아니라, `gcui-art/suno-api` wrapper 가
-`gpt_description_prompt` 를 우리가 원하는 방식으로 받지 못하는 데 있다.
+초기 상태에서는:
+- `manual` 생성은 wrapper `/api/custom_generate` 를 타므로 정상 동작
+- `auto` 생성은 direct Suno API 호출 경로를 타므로 `Unauthorized`
 
-즉 지금 수정이 필요한 곳은:
-- 메인 앱 프로젝트가 아니라
-- `suno-api-dev` 기준의 wrapper 프로젝트
+따라서 진짜 목표는:
+- 메인 앱의 auto 요청도 wrapper로 보내고
+- wrapper가 `gpt_description_prompt` 기반 자동 가사 생성 payload를 처리하게 만드는 것
 
-따라서 새 프로젝트를 열어 wrapper 자체를 수정하는 것이 맞다.
+## 4. 메인 프로젝트에서 이미 반영한 변경
 
-## 4. 현재 메인 프로젝트에서 이미 해둔 것
-
-### 4-1. 로컬 `.env` 전환
-현재 로컬 `d:\music\.env` 는 아래처럼 테스트 wrapper 를 보도록 바뀌어 있다.
+### 4-1. 로컬 env 전환
+현재 로컬 `.env` 는 테스트 wrapper를 보도록 맞춰둔 상태다.
 
 ```env
-SUNO_API_BASE_URL="https://dev-suno.songsai.org"
-MUSIC_PROVIDER_MODE="suno"
 APP_URL="http://localhost:3000"
+MUSIC_PROVIDER_MODE="suno"
+SUNO_API_BASE_URL="http://dev-suno.songsai.org"
 ```
 
-즉 지금 로컬에서 `npm run dev` 를 띄우면:
-- 브라우저는 `http://localhost:3000`
-- 메인 앱 서버 코드는 `https://dev-suno.songsai.org` 를 호출
+참고:
+- 테스트 초기에는 `https://dev-suno.songsai.org` 를 시도했지만 HTTPS 라우팅이 정리되기 전이라 메인 앱 404 HTML이 돌아온 적이 있었다.
+- 현재 테스트는 `http://dev-suno.songsai.org` 기준으로 진행했다.
 
 ### 4-2. UI 차단 해제
-메인 앱에서 `AI 자동 생성` 버튼은 다시 활성화했다.
-
-수정 파일:
+파일:
 - `d:\music\components\auth-panel.tsx`
 
-현재 상태:
+반영 내용:
 - `AI 자동 생성` 버튼 활성화
 - `준비중` 문구 제거
-- 눌렀을 때 차단 메시지 제거
+- auto 선택 시 막던 메시지 제거
 
 ### 4-3. API 차단 해제
-메인 앱 API route 에 있던 auto 모드 차단 로직을 제거했다.
-
-수정 파일:
+파일:
 - `d:\music\app\api\music\route.ts`
 
-현재 상태:
-- `lyricMode === "auto"` 라고 해서 400을 반환하지 않음
-- 실제 provider 까지 요청이 내려감
+반영 내용:
+- `lyricMode === "auto"` 를 400으로 차단하던 로직 제거
 
-## 5. 현재 실패하는 진짜 이유
+### 4-4. provider 경로 정리
+파일:
+- `d:\music\server\music\provider.ts`
 
-로컬에서 `AI 자동 생성` 을 실행하면 아래 에러가 난다.
+반영 내용:
+- auto/manual 모두 wrapper `/api/custom_generate` 호출
+- direct Suno `generate/v2` 호출 상수 제거
+- auto payload에 `gpt_description_prompt`, `mv`, `metadata` 포함
 
-```txt
-Suno music creation request failed. {"detail": "Unauthorized"}
-POST /api/music 502
+핵심 방향:
+
+```ts
+const endpoint = `${env.SUNO_API_BASE_URL}/api/custom_generate`;
 ```
 
-이 에러의 직접 원인은 메인 앱 provider 의 auto 경로가 아직도 wrapper 를 우회하기 때문이다.
+즉 현재 메인 앱에서는 auto/manual 모두 wrapper만 바라본다.
 
-즉 현재 `d:\music\server\music\provider.ts` 는:
+## 5. wrapper 프로젝트에서 확인한 핵심 payload
 
-- `manual` 일 때:
-  - `https://dev-suno.songsai.org/api/custom_generate`
-  - 즉 wrapper 사용
+실제 DevTools 기준으로 auto 생성에 중요한 값은 다음 네 가지다.
 
-- `auto` 일 때:
-  - `https://studio-api.prod.suno.com/api/generate/v2/`
-  - 즉 Suno 본체 API direct call
-
-그래서 auto 는 wrapper 인증 흐름을 못 타고 바로 `Unauthorized` 가 난다.
-
-## 6. 왜 direct call 이 안 되는가
-
-Suno 자동 가사 생성은 payload 만 맞춘다고 끝나는 게 아니다.
-
-wrapper 가 내부적으로 처리해주던 것들이 필요하다.
-
-예:
-- 세션 유지
-- keepAlive
-- session id
-- captcha token
-- 쿠키 기반 인증 흐름
-
-이 흐름 없이 `studio-api.prod.suno.com/api/generate/v2/` 를 직접 치면 `Unauthorized` 가 나기 쉽다.
-
-즉 해결 방향은:
-- 메인 앱의 auto 요청도 결국 wrapper 를 타도록 만들기
-
-## 7. wrapper 에서 필요한 목표 동작
-
-우리가 원하는 것은 `custom_generate` 계열 경로에서도 아래 payload 조합을 자연스럽게 처리하는 것이다.
-
-```json
-{
-  "title": "곡 제목",
-  "prompt": "",
-  "gpt_description_prompt": "고향을 그리워하는 느낌의 가사를 만들어줘",
-  "tags": "한국 트로트, 여성보컬",
-  "negative_tags": "",
-  "generation_type": "TEXT",
-  "mv": "chirp-crow",
-  "make_instrumental": false,
-  "metadata": {
-    "create_mode": "custom",
-    "mv": "chirp-crow",
-    "vocal_gender": "f"
-  }
-}
-```
-
-핵심은 아래 조합을 같이 보낼 수 있어야 한다는 점이다.
-
-- `title`
 - `gpt_description_prompt`
 - `tags`
 - `mv`
-- `vocal_gender`
+- `make_instrumental`
 
-## 8. wrapper 프로젝트에서 봐야 할 파일
+예시:
 
-새로 열 프로젝트에서 우선 확인할 파일:
+```json
+{
+  "generation_type": "TEXT",
+  "gpt_description_prompt": "고향을 그리는 마음을 표현해서 가사를 만들어줘",
+  "make_instrumental": false,
+  "mv": "chirp-crow",
+  "tags": "신비롭고 애절한 분위기 발라드"
+}
+```
+
+보조 필드:
+- `title`
+- `negative_tags`
+- `metadata.create_mode`
+- `metadata.web_client_pathname`
+- `metadata.vocal_gender`
+
+## 6. wrapper 쪽 패치 방향
+
+wrapper 프로젝트 기준 주요 수정 파일은 아래 두 개였다.
 
 - `src/app/api/custom_generate/route.ts`
 - `src/lib/SunoApi.ts`
 
-특히 봐야 할 함수:
-- `custom_generate`
-- `generateSongs`
+### 6-1. custom_generate route
+body 에서 아래 값을 받을 수 있게 확장했다.
 
-## 9. 현재 wrapper 쪽 문제로 추정되는 지점
-
-기존 구조는 대략 아래처럼 나뉘어 있다.
-
-- custom 모드:
-  - `prompt`, `tags`, `title`
-- non-custom 또는 별도 경로:
-  - `gpt_description_prompt`
-
-즉 현재 구조는
-`gpt_description_prompt + title + tags + model + vocal_gender`
-를 한 번에 자연스럽게 받는 데 적합하지 않을 가능성이 높다.
-
-## 10. wrapper 패치 목표
-
-### 목표 1
-`custom_generate` route 가 `gpt_description_prompt` 를 body 에서 받을 수 있게 한다.
-
-### 목표 2
-`generateSongs()` 내부에서 custom 경로라도 `gpt_description_prompt` 가 있으면
-그 값을 payload 에 포함해 Suno 생성 API 로 넘길 수 있게 한다.
-
-### 목표 3
-아래 값들이 같이 유지되게 한다.
-- `title`
-- `tags`
-- `negative_tags`
 - `mv`
-- `vocal_gender`
-- 기존 인증 흐름
+- `gpt_description_prompt`
+- `metadata`
 
-## 11. 메인 프로젝트에서 나중에 다시 맞출 부분
+그리고 `custom_generate(...)` 호출 시 이 값들을 그대로 넘기도록 맞췄다.
 
-wrapper 패치가 끝나면 메인 앱 `provider.ts` 도 정리해야 한다.
+### 6-2. SunoApi.ts
+다음 방향으로 수정했다.
 
-현재는:
-- auto => direct Suno call
+- `GenerationMetadata` 타입 추가
+- `custom_generate()` 시그니처 확장
+- `generateSongs()` 시그니처 확장
+- custom payload 내부에 `gpt_description_prompt` 와 `metadata` 포함
+- `resolvedModel = metadata?.mv || model || DEFAULT_MODEL`
+- payload `mv` 도 `resolvedModel` 기준으로 통일
 
-바꿔야 하는 방향:
-- auto => `dev-suno.songsai.org` wrapper 의 endpoint 호출
+## 7. auto 테스트 중 만난 실제 문제와 해결
 
-즉 최종적으로는 auto/manual 둘 다 wrapper 를 타게 만드는 것이 목표다.
+### 7-1. direct call 문제
+증상:
+- `Unauthorized`
 
-## 12. 테스트 순서 권장안
+원인:
+- 메인 앱 auto 요청이 wrapper를 우회해 direct Suno API 호출
 
-### 1단계. wrapper 단독 패치
-- wrapper 프로젝트 로컬에서 코드 수정
-- `custom_generate` 로 `gpt_description_prompt` 전달 실험
+해결:
+- `provider.ts` 에서 auto도 wrapper `/api/custom_generate` 로 통일
 
-### 2단계. N100 테스트 wrapper 반영
-- `~/services/suno-api-dev` 에만 반영
-- 운영 wrapper `~/services/suno-api` 는 건드리지 않음
+### 7-2. HTTPS 라우팅 문제
+증상:
+- `https://dev-suno.songsai.org` 호출 시 메인 앱 404 HTML 반환
 
-### 3단계. 메인 앱 로컬 테스트
-- `d:\music\.env` 는 이미 `https://dev-suno.songsai.org`
-- 로컬 `npm run dev`
-- `AI 자동 생성` 으로 요청
+원인:
+- dev-suno HTTPS 라우팅이 정리되기 전 메인 도메인 443 블록으로 빠짐
 
-### 4단계. 성공 시 운영 반영 검토
-- 충분히 검증된 뒤에만 운영 wrapper 반영 여부 판단
+임시 해결:
+- 로컬 `.env` 의 `SUNO_API_BASE_URL` 을 `http://dev-suno.songsai.org` 로 사용
 
-## 13. 운영 안전 원칙
+### 7-3. Playwright 쿠키 주입 문제
+증상:
+- `Protocol error (Storage.setCookies): Invalid cookie fields`
 
-반드시 지켜야 할 원칙:
+원인:
+- CAPTCHA 브라우저 실행 시 너무 많은 쿠키를 Playwright에 넣다가 실패
 
-- 운영 wrapper `suno.songsai.org` 는 직접 수정하지 않는다
-- 테스트 wrapper `dev-suno.songsai.org` 에서만 먼저 검증한다
-- 운영 메인 앱에는 즉시 반영하지 않는다
-- 패치 성공 후에도 운영 반영은 별도 단계로 분리한다
+해결 방향:
+- 테스트 wrapper `launchBrowser()` 에서 Playwright에 넣는 쿠키를 `__session` 하나만 남기도록 축소
 
-## 14. 현재 메인 프로젝트 관련 참고 문서
+핵심 형태:
 
-이 문서와 함께 보면 좋은 파일:
-
-- `d:\music\suno_progress_notes.md`
-- `d:\music\dev_server_cleanup_plan.md`
-- `d:\music\deploy\n100_quickstart.md`
-- `d:\music\ai_auto_lyrics_handoff.md`
-
-## 15. 다음 세션에 바로 전달하면 좋은 문장
-
-새 wrapper 프로젝트 세션에서 아래처럼 말하면 맥락을 빠르게 이어갈 수 있다.
-
-```txt
-이 wrapper 프로젝트는 d:\music 메인 앱의 AI 자동 가사 생성 복구를 위한 작업이다.
-운영 wrapper는 suno.songsai.org(3101), 테스트 wrapper는 dev-suno.songsai.org(3201) 이다.
-메인 앱은 이미 auto 차단을 풀었지만 provider의 auto 경로가 아직 direct Suno call이라 Unauthorized가 난다.
-목표는 custom_generate / SunoApi.ts 를 패치해서 gpt_description_prompt + title + tags + mv + vocal_gender 를 wrapper 인증 흐름 안에서 처리하는 것이다.
+```ts
+const sessionValue = String(this.currentToken || "").replace(/[\u0000-\u001F\u007F]/g, "").trim();
 ```
 
-## 16. 현재 결론
+이후 `browserCookies` 에는 `__session` 쿠키 하나만 넣고 `addCookies()` 호출
 
-지금 메인 앱은 테스트 준비가 끝난 상태다.
+## 8. 현재 테스트 상태
 
-막힌 것은 오직 wrapper 패치다.
+최신 상태:
+- 테스트 wrapper `dev-suno.songsai.org` 에서 auto 생성 성공
+- 실제로 자동 가사가 만들어지는 것 확인
 
-즉 다음 작업의 본질은:
-- 메인 앱 수정이 아니라
-- wrapper 에서 `gpt_description_prompt` 를 제대로 처리하도록 만드는 것이다.
+의미:
+- `gpt_description_prompt` 기반 auto 흐름이 테스트 wrapper 기준으로는 복구됨
+
+아직 남은 일:
+- 테스트 wrapper 코드 정리 및 재현 가능한 형태로 보관
+- 운영 반영 여부 판단
+
+## 9. 운영 반영은 아직 하지 말아야 하는 이유
+
+운영에 바로 반영하지 않은 이유:
+- 운영 wrapper는 실제 사용자 요청을 처리 중
+- auto 관련 패치는 CAPTCHA, 쿠키, payload 형태까지 영향을 줌
+- 충분히 안정화 전에는 운영 wrapper를 건드리면 생성 장애 가능
+
+현재 원칙:
+- 운영 wrapper `suno.songsai.org` 는 유지
+- 테스트 wrapper `dev-suno.songsai.org` 에서만 검증
+- 운영 반영은 별도 단계
+
+## 10. 다음에 이어서 할 추천 순서
+
+1. `D:\wrapper\suno-api` 의 실제 수정본 정리
+2. 테스트 wrapper 코드와 로컬 수정본 차이 정리
+3. wrapper 쪽 변경을 재현 가능한 방식으로 문서화
+4. 메인 프로젝트에서 auto UI/문구를 다듬을지 결정
+5. 충분히 안정화되면 운영 wrapper 반영 여부 판단
+
+## 11. 새 세션에서 바로 이어가기 위한 문장
+
+메인 프로젝트 세션에서:
+
+```txt
+music 프로젝트 이어서 하자. 먼저 d:\music\ai_auto_lyrics_handoff.md 와 d:\music\dev_server_cleanup_plan.md 읽고 현재 auto-lyrics 테스트 상태부터 이어가줘.
+```
+
+wrapper 프로젝트 세션에서:
+
+```txt
+wrapper 프로젝트 이어서 하자. 먼저 d:\wrapper\wrapper_project_handoff.md 읽고, dev-suno 테스트 wrapper에서 성공한 auto-lyrics 패치를 정리하는 작업부터 이어가줘.
+```
+
+## 12. 요약
+
+지금은 메인 프로젝트의 auto 경로와 테스트 wrapper 경로가 연결된 상태다.
+가장 큰 성과는 **운영 영향 없이 `dev-suno` 에서 자동 가사 생성 성공을 확인한 것**이다.
+다음 작업은 “추가 개발”보다는 “정리, 문서화, 안정화, 운영 반영 판단”에 가깝다.

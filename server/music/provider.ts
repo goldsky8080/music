@@ -17,7 +17,6 @@ export interface MusicProvider {
 // Suno 웹앱 DevTools에서 추적한 내부 모델 식별자.
 const SUNO_MODEL_V5 = "chirp-crow";
 const SUNO_MODEL_V45_PLUS = "chirp-bluejay";
-const SUNO_STUDIO_API_BASE_URL = "https://studio-api.prod.suno.com";
 
 // UI 모델 선택값을 Suno 내부 모델 키로 변환한다.
 function resolveModelVersion(modelVersion?: "v4_5_plus" | "v5") {
@@ -122,9 +121,7 @@ export class SunoProvider implements MusicProvider {
      * 자동 가사 모드는 현재 API 레벨에서 막혀 있지만,
      * wrapper 패치 재개를 고려해 provider 쪽 분기 구조는 유지한다.
      */
-    const endpoint = isAutoLyrics
-      ? `${SUNO_STUDIO_API_BASE_URL}/api/generate/v2/`
-      : `${env.SUNO_API_BASE_URL}/api/custom_generate`;
+    const endpoint = `${env.SUNO_API_BASE_URL}/api/custom_generate`;
 
     /**
      * Payload 설계 원칙:
@@ -144,8 +141,6 @@ export class SunoProvider implements MusicProvider {
           make_instrumental: false,
           wait_audio: false,
           mv: sunoModel,
-          token: null,
-          override_fields: ["tags"],
           metadata: {
             create_mode: "custom",
             is_custom: true,
