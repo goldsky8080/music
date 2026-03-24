@@ -12,6 +12,7 @@ export type SessionUser = {
 };
 
 const secret = new TextEncoder().encode(env.AUTH_SECRET);
+const isSecureCookie = Boolean(env.APP_URL?.startsWith("https://"));
 
 /**
  * 로그인 성공 시 7일짜리 세션 토큰을 생성한다.
@@ -27,6 +28,23 @@ export async function createSessionToken(user: SessionUser) {
     .setIssuedAt()
     .setExpirationTime("7d")
     .sign(secret);
+}
+
+/**
+ * 현재 배포 주소가 HTTPS인지에 따라 세션 쿠키 보안 옵션을 통일해서 제공한다.
+ *
+ * 현재 N100 서버는 HTTP로 먼저 검증 중이기 때문에 secure 쿠키를 강제로 켜면
+ * 브라우저가 세션 쿠키를 저장하지 않아 로그인 후에도 Unauthorized가 발생할 수 있다.
+ * 추후 HTTPS를 붙이면 APP_URL을 https로 바꾸는 것만으로 secure 쿠키가 다시 자동 적용된다.
+ */
+export function buildSessionCookieOptions(maxAge: number) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: isSecureCookie,
+    path: "/",
+    maxAge,
+  };
 }
 
 // 쿠키 토큰을 검증하고 내부에서 쓰기 쉬운 SessionUser 형태로 다시 만든다.

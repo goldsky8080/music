@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { AUTH_COOKIE_NAME, createSessionToken } from "@/lib/auth";
+import { AUTH_COOKIE_NAME, buildSessionCookieOptions, createSessionToken } from "@/lib/auth";
 import { hashPassword } from "@/server/auth/password";
 import { grantSignupCredits } from "@/server/credits/service";
 import { signupSchema } from "@/server/auth/schema";
@@ -58,11 +58,7 @@ export async function POST(request: Request) {
   response.cookies.set({
     name: AUTH_COOKIE_NAME,
     value: token,
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    ...buildSessionCookieOptions(60 * 60 * 24 * 7),
   });
 
   return response;
