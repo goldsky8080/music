@@ -196,16 +196,20 @@ function groupMusicItems(musics: MusicRow[]) {
         status: summarizeGroupStatus(statuses),
         createdAt: first.createdAt,
         errorMessage,
-        tracks: visibleTracks.map((track) => ({
-          id: track.id,
-          status: track.status,
-          mp3Url: track.mp3Url,
-          mp4Url:
-            [...track.videos]
-              .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-              .find((video) => Boolean(video.mp4Url))?.mp4Url ?? null,
-          downloadAvailableAt: new Date(track.createdAt.getTime() + DOWNLOAD_DELAY_MS),
-        })),
+        tracks: visibleTracks.map((track) => {
+          const latestVideo = [...track.videos]
+            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+            .find((video) => Boolean(video.mp4Url));
+
+          return {
+            id: track.id,
+            status: track.status,
+            mp3Url: track.mp3Url,
+            mp4Url: latestVideo?.mp4Url ?? null,
+            latestVideoId: latestVideo?.id ?? null,
+            downloadAvailableAt: new Date(track.createdAt.getTime() + DOWNLOAD_DELAY_MS),
+          };
+        }),
         hiddenBonusTrackCount: hiddenBonusTracks.length,
         canUnlockBonusTrack,
         bonusUnlockExpiresAt: hiddenBonusTracks.length > 0 ? bonusUnlockExpiresAt : null,

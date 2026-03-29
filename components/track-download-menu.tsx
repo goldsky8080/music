@@ -7,6 +7,7 @@ type TrackDownloadMenuProps = {
   trackId: string;
   trackIndex: number;
   mp4Url?: string | null;
+  latestVideoId?: string | null;
   title: string;
   lyrics: string;
   isMr?: boolean;
@@ -17,6 +18,7 @@ export function TrackDownloadMenu({
   trackId,
   trackIndex,
   mp4Url,
+  latestVideoId,
   title,
   lyrics,
   isMr = false,
@@ -74,6 +76,7 @@ export function TrackDownloadMenu({
                   musicId={trackId}
                   trackIndex={trackIndex}
                   mp4Url={mp4Url}
+                  latestVideoId={latestVideoId}
                   title={title}
                   isMr={isMr}
                   onCompleted={onCompleted}

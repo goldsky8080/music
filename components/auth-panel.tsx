@@ -40,6 +40,7 @@ type MusicTrack = {
   status: "QUEUED" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED";
   mp3Url: string | null;
   mp4Url?: string | null;
+  latestVideoId?: string | null;
   downloadAvailableAt: string;
 };
 
@@ -1335,6 +1336,7 @@ export function AuthPanel({ showAllMusicList = false }: AuthPanelProps) {
                                 trackId={track.id}
                                 trackIndex={index + 1}
                                 mp4Url={track.mp4Url}
+                                latestVideoId={track.latestVideoId}
                                 title={music.title ?? "제목 없는 곡"}
                                 lyrics={music.lyrics}
                                 isMr={music.isMr}

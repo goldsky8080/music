@@ -6,6 +6,7 @@ type VideoRenderControlsProps = {
   musicId: string;
   trackIndex: number;
   mp4Url: string | null | undefined;
+  latestVideoId?: string | null;
   title: string;
   isMr?: boolean;
   onCompleted?: () => Promise<void> | void;
@@ -38,10 +39,16 @@ function triggerDownload(url: string) {
   anchor.remove();
 }
 
+function buildVideoDownloadUrl(musicId: string, videoId?: string | null) {
+  const query = videoId ? `?videoId=${encodeURIComponent(videoId)}` : "";
+  return `/api/music/${musicId}/video-file${query}`;
+}
+
 export function VideoRenderControls({
   musicId,
   trackIndex,
   mp4Url,
+  latestVideoId,
   title,
   isMr = false,
   onCompleted,
@@ -172,7 +179,7 @@ export function VideoRenderControls({
           if (inputRef.current) {
             inputRef.current.value = "";
           }
-          triggerDownload(nextMp4Url);
+          triggerDownload(buildVideoDownloadUrl(musicId, renderingVideoId));
           window.setTimeout(() => {
             setIsRendering(false);
             setProgress(0);
@@ -290,7 +297,7 @@ export function VideoRenderControls({
       </button>
       {mp4Url ? (
         <a
-          href={mp4Url}
+          href={buildVideoDownloadUrl(musicId, latestVideoId)}
           download
           className="rounded-full bg-[var(--accent)] px-3 py-2 text-[11px] font-semibold text-white"
         >
